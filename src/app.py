@@ -9,6 +9,7 @@ from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
 from models import db, User
+from werkzeug.security import generate_password_hash, check_password_hash
 #from models import Person
 
 app = Flask(__name__)
@@ -31,6 +32,15 @@ setup_admin(app)
 def handle_invalid_usage(error):
     return jsonify(error.to_dict()), error.status_code
 
+# validacion de los password 
+def set_password(password):
+    return generate_password_hash(password)
+
+
+def check_password(hash_password, password):
+    return check_password_hash(hash_password, password)
+
+
 # generate sitemap with all your endpoints
 @app.route('/')
 def sitemap():
@@ -44,6 +54,69 @@ def handle_hello():
     }
 
     return jsonify(response_body), 200
+
+
+@app.route("/user", methods=["POST"])
+def add_user():
+    body = request.json
+
+    email = body.get("email")
+    password= body.get("password")
+
+
+
+    if email is None or password is None:
+        return jsonify({"message": "You need and email a password"}), 400
+
+    
+    # vadamos que el usuario no exista y es un usuario nuevo nuevo
+    user = User.query.filter_by(email=email).one_or_none()
+
+    if user is not None:
+        return jsonify({"message": "user exists"}), 400
+
+    else:
+        password = set_password(password)
+        user = User(email=email, password=password)
+        db.session.add(user)
+
+        try:
+            db.session.commit()
+            return jsonify({"message":"user created"}), 201
+        except Exception as error:
+            print(error)
+            db.session.rollback()
+            return jsonify({"message": f"error: {error}" }) 
+
+    return jsonify([]), 200
+
+
+
+@app.route("/login", methods=["POST"])
+def handle_login():
+    body = request.json
+
+    email = body.get("email")
+    password= body.get("password")
+
+    if email is None or password is None:
+        return jsonify({"message": "You need and email a password"}), 400
+    
+    else:
+        user = User.query.filter_by(email=email).one_or_none()
+
+        if user is None:
+            return jsonify({"message":"Bad credentials"}), 400
+        else:
+            if check_password(user.password, password):
+                # debemos crear el token y responderlo
+                return jsonify({"message":"exitooooo"}), 200
+            else:
+                return jsonify({"message":"Bad credentials"}), 400
+
+
+
+
 
 # this only runs if `$ python src/app.py` is executed
 if __name__ == '__main__':
